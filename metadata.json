@@ -1,0 +1,6 @@
+{
+  "name": "Nowshera Family Clinic",
+  "description": "Full-stack Clinic Appointment & Patient Management System for Nowshera Family Clinic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

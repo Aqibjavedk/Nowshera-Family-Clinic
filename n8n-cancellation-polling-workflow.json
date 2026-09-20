@@ -1,0 +1,205 @@
+{
+  "name": "Clinic Appointment Cancellation Email",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "c1f7a001-e280-4999-91a1-f3b110000001",
+      "name": "Schedule Trigger (Every 1m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://rnqxgbewpeyonlveequu.supabase.co/rest/v1/appointments?select=id,start_time,status,cancellation_reason,cancellation_email_sent_at,patient:patient_id(id,full_name,email),doctor:doctor_id(id,profile:profiles(full_name))&status=eq.cancelled&cancellation_email_sent_at=is.null&order=created_at.asc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c1f7a001-e280-4999-91a1-f3b110000002",
+      "name": "Supabase: Fetch Pending Cancellations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\nfor (const item of $input.all()) {\n  const record = item.json;\n  if (!record || !record.id) continue;\n\n  const startTimeStr = record.start_time;\n  let apptDate = '';\n  let apptTime = '';\n  if (startTimeStr) {\n    const d = new Date(startTimeStr);\n    apptDate = new Intl.DateTimeFormat('en-US', {\n      timeZone: 'Asia/Karachi',\n      year: 'numeric',\n      month: 'short',\n      day: 'numeric',\n    }).format(d);\n    apptTime = new Intl.DateTimeFormat('en-US', {\n      timeZone: 'Asia/Karachi',\n      hour: '2-digit',\n      minute: '2-digit',\n      hour12: true,\n    }).format(d);\n  }\n\n  results.push({\n    json: {\n      appointment_id: record.id,\n      patient_name: record.patient?.full_name || 'Patient',\n      patient_email: record.patient?.email || '',\n      doctor_name: record.doctor?.profile?.full_name || record.doctor?.full_name || 'Doctor',\n      appointment_date: apptDate,\n      appointment_time: apptTime,\n      cancellation_reason: record.cancellation_reason || 'Cancelled by clinic administration',\n      status: 'cancelled'\n    }\n  });\n}\nreturn results;"
+      },
+      "id": "c1f7a001-e280-4999-91a1-f3b110000003",
+      "name": "Format Clinic Data (Asia/Karachi)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.patient_email }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "c1f7a001-e280-4999-91a1-f3b110000004",
+      "name": "Check Valid Email",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "Nowshera Family Clinic <clinic@nowsherafamilyclinic.pk>",
+        "toEmail": "={{ $json.patient_email }}",
+        "subject": "Appointment Cancelled - Nowshera Family Clinic",
+        "text": "=Hello {{ $json.patient_name }},\n\nYour appointment at Nowshera Family Clinic has been cancelled.\n\nAppointment Details\n\nDoctor: {{ $json.doctor_name }}\nDate: {{ $json.appointment_date }}\nTime: {{ $json.appointment_time }}\n\nAppointment ID:\n{{ $json.appointment_id }}\n\nReason:\n{{ $json.cancellation_reason }}\n\nIf you need another appointment, please book a new available slot.\n\nThank you,\nNowshera Family Clinic"
+      },
+      "id": "c1f7a001-e280-4999-91a1-f3b110000005",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1180,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://rnqxgbewpeyonlveequu.supabase.co/rest/v1/appointments?id=eq.{{ $json.appointment_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cancellation_email_sent_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "c1f7a001-e280-4999-91a1-f3b110000006",
+      "name": "Supabase: Mark Email Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Every 1m)": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Fetch Pending Cancellations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Fetch Pending Cancellations": {
+      "main": [
+        [
+          {
+            "node": "Format Clinic Data (Asia/Karachi)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Clinic Data (Asia/Karachi)": {
+      "main": [
+        [
+          {
+            "node": "Check Valid Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Valid Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Mark Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
